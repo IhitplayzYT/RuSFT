@@ -1,29 +1,19 @@
-"""
-Main orchestration script for pulling and preparing SFT training data.
-This script coordinates data pulling from various sources and ingestion for LLM fine-tuning.
-"""
-
 import sys
 from pathlib import Path
 from loguru import logger
 import helper
-# Add src directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 from data_pipeline import DATA_DIR
+sys.path.insert(0, str(Path(__file__).parent))
 
 def main():   
     args = helper.Parser()
     helper.setup_logging()
-    
-    logger.info("Starting data preparation for LLM fine-tuning")
     logger.info(f"Data directory: {DATA_DIR}")
-    
-    # Determine which sources to pull
+    print(args)
     sources = args.sources
     if "all" in sources:
         sources = ["linux", "rust", "go", "networking", "books"]
     
-    # Pull data
     if not args.skip_pull:
         if "linux" in sources:
             helper.pull_linux_data()
@@ -41,17 +31,10 @@ def main():
             helper.process_external_books(args.external_books)
     
     if not args.skip_ingest:
-        data_sources = helper.ingest_all_data()
-        
-        if data_sources:
-            helper.create_training_dataset(data_sources, args.output)
-    
-    logger.info("=" * 100)
-    logger.info("DATA PREPARATION COMPLETE")
-    logger.info("=" * 100)
-
-    
-
+        data_src = helper.ingest_all_data()
+        if data_src:
+            helper.create_training_dataset(data_src, args.output)
+    logger.info("Data Loaded!")
 
 
 if __name__ == "__main__":

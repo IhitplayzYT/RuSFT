@@ -1,17 +1,7 @@
-
 from loguru import logger
 import argparse
 from pathlib import Path
-from data_pipeline import (
-    LinuxDataPuller,
-    RustDataPuller,
-    GoDataPuller,
-    NetworkingDataPuller,
-    BookDataProcessor,
-    DataAggregator,
-    DataIngestor,
-    DATA_DIR
-)
+from data_pipeline import (LinuxDataPuller,RustDataPuller,GoDataPuller,NetworkingDataPuller,PDFDirProcessor,DataAggregator,DATA_DIR)
 import sys
 
 def Parser():
@@ -51,7 +41,7 @@ def Parser():
         default=None,
         help="Output path for training dataset (default: data/training_dataset.jsonl)"
     )
-    return parser
+    return parser.parse_args()
     
 def setup_logging():
     logger.remove()
@@ -131,7 +121,7 @@ def pull_networking_data(rfc_count: int = 150):
 def process_external_books(external_dir: Path = None):
     
     try:
-        processed_path = BookDataProcessor.process_external_books(external_dir)
+        processed_path = PDFDirProcessor.process_external_books(external_dir)
         logger.info(f"[SUCCESS] Processed books: {processed_path}")
     except Exception as e:
         logger.error(f"[FAILED] Failed to process external books: {e}")
