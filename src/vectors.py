@@ -247,6 +247,8 @@ class VectorDBWrangler:
         self.embedding_model = embedding_model
         self.router_promotion_threshold = router_promotion_threshold
         self.router_promotion_window = router_promotion_window
+        self._op_cnt = 0
+        self._last_autoreg = 0
         self.embedder = SentenceTransformer(embedding_model)
         self.topic_dbs: Dict[str, TopicVectorDB] = {}
         for topic in topic_names:
@@ -261,24 +263,39 @@ class VectorDBWrangler:
     def add_topic_db(self,topic: str,text: str,metadata: Optional[Dict[str, Any]] = None,entry_id: Optional[str] = None) -> str:
         if topic not in self.topic_dbs: raise ValueError(f"Unknown topic: {topic}")
         vector = self.embed(text)
+        self._op_cnt += 1
         return self.topic_dbs[topic].add(vector,text,metadata,entry_id)
     
     def search_topic_db(self,topic: str,query: str,k: int = 5,update_access: bool = True) -> List[Tuple[VectorEntry, float]]:
         if topic not in self.topic_dbs: raise ValueError(f"Unknown topic: {topic}")
         query_vector = self.embed(query)
+        self._op_cnt += 1
         return self.topic_dbs[topic].search(query_vector,k,update_access)
     
     def search_router_db(self,query: str,k: int = 5,update_access: bool = True) -> List[Tuple[VectorEntry, float]]:
         query_vector = self.embed(query)
+        self._op_cnt += 1
         return self.router_db.search(query_vector,k,update_access)
     
     def promote(self,topics: Optional[List[str]] = None,num_per_topic: int = 3,summary_method: str = "centroid") -> Dict[str, List[str]]:
         if topics is None: topics = list(self.topic_dbs.keys())
         return self.router_db.batch_promote({topic: self.topic_dbs[topic] for topic in topics},num_per_topic,summary_method)
     
-    def autoregress(self,interval: int = 100,num_promotions: int = 5) -> Dict[str, Any]:
-        pass
-
+    def autoregress(self,interval: int = 10,num_promotions: int = 5) -> Dict[str, Any]:
+        """
+        Promote frequently accessed vectors after each interval of DB operations.
+        interval: Number of add/search operations required between runs.
+        Returns: Statistics
+        """
+        if interval <= 0: raise ValueError("interval must be a positive integer")
+        if num_promotions <= 0: raise ValueError("num_promotions must be a positive integer")
+        op_last = self._op_cnt - self._last_autoreg
+        if op_last < interval: return {"total_promoted": 0,"topics_promoted": 0,"promotion_results": {},"router_db_size": len(self.router_db.entries),"operations": self._op_cnt,"operations_since_last_run": op_last,"interval": interval,"promotion_due": False}
+        promotion_results = self.promote(num_per_topic=num_promotions,summary_method="centroid")
+        self._last_autoreg = self._op_cnt
+        stats = {"total_promoted": sum(len(ids) for ids in promotion_results.values()),"topics_promoted": sum(bool(ids) for ids in promotion_results.values()),"promotion_results": promotion_results,"router_db_size": len(self.router_db.entries),"operations": self._op_cnt,"operations_since_last_run": op_last,"interval": interval,"promotion_due": True}
+        logger.info(f"Autoregression completed: {stats}")
+        return stats
     
     def get_topic_db(self, topic: str) -> TopicVectorDB: return self.topic_dbs.get(topic)
     
